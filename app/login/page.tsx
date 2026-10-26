@@ -19,7 +19,13 @@ export default function LoginPage() {
       password: String(form.get("password")),
     });
     setLoading(false);
-    if (error) return setError("이메일 또는 비밀번호가 맞지 않습니다.");
+    if (error) {
+      const msg: Record<string, string> = {
+        invalid_credentials: "이메일 또는 비밀번호가 맞지 않습니다.",
+        email_not_confirmed: "이메일 인증이 안 된 계정입니다. 관리자에게 문의하세요.",
+      };
+      return setError(msg[error.code ?? ""] ?? `로그인 실패: ${error.message}`);
+    }
     router.replace("/");
     router.refresh();
   }
