@@ -1,0 +1,24 @@
+# main에 푸시하면 리눅스에서 빌드해 Netlify에 배포
+# (Netlify 무료 플랜은 비공개 저장소의 Git 빌드를 막고, Windows 로컬 빌드는 Netlify 도구 버그로 실패하기 때문)
+name: Deploy to Netlify
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx --yes netlify-cli deploy --build --prod
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
