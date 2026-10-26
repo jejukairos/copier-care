@@ -63,7 +63,7 @@ profiles(이름, 휴대폰, role, active) / clients / machines(기계번호 UNIQ
   - GitHub Secrets: `NETLIFY_AUTH_TOKEN`(사용자 허락 받고 저장), `NETLIFY_SITE_ID`. PowerShell 파이프로 넣으면 BOM 붙어 깨짐 → `gh secret set --body` 사용.
   - Netlify 기본 "팀원만 접속(sso_login)" 보호는 운영에서 해제함. 환경변수 NEXT_PUBLIC_SUPABASE_URL/ANON_KEY는 Netlify에 설정됨.
   - 배포 확인: `gh run list --repo jejukairos/copier-care`. (테이블·RLS·샘플데이터: 거래처 3곳, 컬러기 3대, 흑백기 2대, 각 3개월치 점검기록 / 초대 로그인 / 권한 구분)
-- [ ] ② 거래처/기계/계약 등록, 항목 관리, 부품 교체이력
+- [~] ② 거래처/기계/계약 등록, 항목 관리, 부품 교체이력, 직원 명단 — 코드 배포 완료(2026-10-26), `0002_staff.sql`은 사용자가 휴대폰 SQL Editor로 적용(짧은 SQL은 한 줄 1문장으로 주면 휴대폰 붙여넣기 OK). 사용자 확인 대기.
 - [ ] ③ 사진 업로드 + 직접 입력 + 저장 시 계산
 - [ ] ④ 대시보드·검색·기계 상세·월별 리포트·엑셀
 - [ ] ⑤ 웹 푸시 알림 + 아침 8시(KST) 요약 + 중복 방지

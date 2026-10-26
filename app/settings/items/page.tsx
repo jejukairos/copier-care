@@ -35,14 +35,23 @@ export default async function ItemsPage({ searchParams }: PageProps<"/settings/i
     supabase.from("part_types").select("*").order("sort"),
   ]);
 
+  // 평소엔 한 줄 목록, 누르면 펼쳐서 수정
   const section = (table: "consumable_types" | "part_types", title: string, rows: typeof consumables) => (
     <section id={table} className="flex flex-col gap-2">
       <h2 className="text-lg font-bold">{title}</h2>
+      <div className="card divide-y divide-gray-100 p-0">
       {[...(rows ?? []), null].map((r) => (
-        <form key={r?.id ?? "new"} action={saveItem} className={`card flex flex-col gap-2 ${r && !r.active ? "opacity-50" : ""}`}>
+        <details key={r?.id ?? "new"} className={r && !r.active ? "opacity-50" : ""}>
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3">
+            {r ? <>
+              <span className="flex-1 font-medium">{r.name}</span>
+              {table === "consumable_types" && r.is_main && <span className="rounded bg-blue-50 px-1.5 text-xs text-blue-700">주요</span>}
+              <span className="text-xs text-gray-500">{TARGETS[r.applies_to as keyof typeof TARGETS]}{!r.active && " · 사용 안 함"}</span>
+            </> : <span className="font-semibold text-blue-600">+ 새 항목 추가</span>}
+          </summary>
+        <form action={saveItem} className="flex flex-col gap-2 px-4 pb-4">
           <input type="hidden" name="table" value={table} />
           {r && <input type="hidden" name="id" value={r.id} />}
-          {!r && <p className="text-sm font-semibold text-blue-600">+ 새 항목</p>}
           <div className="grid grid-cols-[1fr_auto_4rem] gap-2">
             <input name="name" required defaultValue={r?.name ?? ""} placeholder="이름" className="input" />
             <select name="applies_to" defaultValue={r?.applies_to ?? (table === "part_types" ? "both" : "color")} className="input">
@@ -63,10 +72,12 @@ export default async function ItemsPage({ searchParams }: PageProps<"/settings/i
               </select>
             )}
             {r?.tray_no && <span className="text-gray-500">트레이 수 {r.tray_no}개 이상 기계만 표시</span>}
-            <button className="btn-outline ml-auto py-2">{r ? "수정" : "추가"}</button>
+            <button className="btn-outline ml-auto py-2">{r ? "저장" : "추가"}</button>
           </div>
         </form>
+        </details>
       ))}
+      </div>
     </section>
   );
 
