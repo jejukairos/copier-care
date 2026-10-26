@@ -57,7 +57,11 @@ profiles(이름, 휴대폰, role, active) / clients / machines(기계번호 UNIQ
 - [x] 공개가입 끔, DB 비밀번호 재설정 완료(확인함).
 - [~] ① 로그인: 이메일+비밀번호 로그인(`app/login`), `proxy.ts`(Next16의 middleware)로 세션 갱신·비로그인 리다이렉트, 로그아웃. `next.config.ts`에서 cacheComponents 끔(전 화면 사용자별 동적). 빌드 통과.
   - 초대 메일 링크는 Site URL(localhost)로 가서 휴대폰에서 안 열림 → **계정은 Supabase 대시보드 Authentication > Users > Add user > Create new user(Auto Confirm)로 생성**. 앱 내 직원 추가는 배포 후 고려.
-  - Netlify CLI(`netlify-cli` devDependency)로 배포. 로그인은 CLI가 주는 authorize 링크를 사용자가 휴대폰으로 승인. (테이블·RLS·샘플데이터: 거래처 3곳, 컬러기 3대, 흑백기 2대, 각 3개월치 점검기록 / 초대 로그인 / 권한 구분)
+- [x] **배포 완료**: https://copier-care-8837.netlify.app (Netlify site id `2ddc9cde-57e4-465a-891f-d7e92077b420`), 코드 GitHub 비공개 `jejukairos/copier-care`.
+  - 배포 방식: **main에 push → GitHub Actions(`.github/workflows/deploy.yml`)가 리눅스에서 빌드 → netlify-cli로 배포**. 이유: Windows 로컬 `netlify deploy --build`는 엣지함수 경로 버그로 실패, Netlify 무료플랜은 비공개 저장소 Git 빌드를 "Unrecognized Git contributor"로 차단. Netlify 쪽 Git 빌드는 `stop_builds=true`로 꺼둠.
+  - GitHub Secrets: `NETLIFY_AUTH_TOKEN`(사용자 허락 받고 저장), `NETLIFY_SITE_ID`. PowerShell 파이프로 넣으면 BOM 붙어 깨짐 → `gh secret set --body` 사용.
+  - Netlify 기본 "팀원만 접속(sso_login)" 보호는 운영에서 해제함. 환경변수 NEXT_PUBLIC_SUPABASE_URL/ANON_KEY는 Netlify에 설정됨.
+  - 배포 확인: `gh run list --repo jejukairos/copier-care`. (테이블·RLS·샘플데이터: 거래처 3곳, 컬러기 3대, 흑백기 2대, 각 3개월치 점검기록 / 초대 로그인 / 권한 구분)
 - [ ] ② 거래처/기계/계약 등록, 항목 관리, 부품 교체이력
 - [ ] ③ 사진 업로드 + 직접 입력 + 저장 시 계산
 - [ ] ④ 대시보드·검색·기계 상세·월별 리포트·엑셀
