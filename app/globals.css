@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* 현장(야외)에서 잘 보이도록 밝은 화면 고정 */
+body {
+  background: #ffffff;
+  color: #171717;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
