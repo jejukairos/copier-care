@@ -56,6 +56,7 @@ export default async function InspectPage({ searchParams }: PageProps<"/inspect"
         machine={{ id: m.id, serial: m.serial, color: m.color_type === "color" }}
         types={types ?? []} last={last as Last} staff={staff ?? []}
         today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+        ai={!!process.env.GEMINI_API_KEY}
       />
     </Page>
   );
