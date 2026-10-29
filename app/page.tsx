@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
+import { MachineSearch } from "./inspect/search";
 
-type Reading = { percent: number; consumable_types: { name: string; sort: number } | null };
+type Reading = { percent: number | null; status: string | null; consumable_types: { name: string; sort: number } | null };
 type Row = {
   id: number; serial: string; model: string;
   clients: { name: string } | null;
@@ -21,7 +22,7 @@ export default async function Home() {
   const [{ data: settings }, { data: machines }] = await Promise.all([
     supabase.from("app_settings").select("key, value").in("key", ["urgent_percent", "warning_percent"]),
     supabase.from("machines")
-      .select("id, serial, model, clients(name), inspections(inspected_on, consumable_readings(percent, consumable_types(name, sort)))")
+      .select("id, serial, model, clients(name), inspections(inspected_on, consumable_readings(percent, status, consumable_types(name, sort)))")
       .eq("active", true)
       .order("inspected_on", { referencedTable: "inspections", ascending: false })
       .limit(1, { referencedTable: "inspections" }),
@@ -30,17 +31,18 @@ export default async function Home() {
   const urgent = setting("urgent_percent", 10);
   const warning = setting("warning_percent", 20);
 
-  // 기계별 가장 최근 점검의 소모품 중 주의 이하만, 가장 급한 기계부터
+  // 기계별 가장 최근 점검의 소모품 중 주의 이하(또는 기계가 "교체" 상태 표시)만, 가장 급한 기계부터
+  const pct = (r: Reading) => r.percent ?? 0;
   const alerts = ((machines ?? []) as unknown as Row[])
     .map((m) => {
       const last = m.inspections[0];
       const items = (last?.consumable_readings ?? [])
-        .filter((r) => r.percent <= warning)
-        .toSorted((a, b) => a.percent - b.percent);
+        .filter((r) => (r.percent !== null && r.percent <= warning) || r.status?.includes("교체"))
+        .toSorted((a, b) => pct(a) - pct(b));
       return { ...m, last, items };
     })
     .filter((m) => m.items.length > 0)
-    .toSorted((a, b) => a.items[0].percent - b.items[0].percent);
+    .toSorted((a, b) => pct(a.items[0]) - pct(b.items[0]));
 
   const menu = [
     { href: "/clients", icon: "🏢", label: "거래처 · 기계" },
@@ -72,14 +74,16 @@ export default async function Home() {
             <div className="flex flex-wrap gap-1.5">
               {m.items.map((r) => (
                 <span key={r.consumable_types?.name}
-                  className={`rounded-full px-2.5 py-1 text-sm font-semibold ${r.percent <= urgent ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}>
-                  {r.consumable_types?.name} {r.percent}%
+                  className={`rounded-full px-2.5 py-1 text-sm font-semibold ${pct(r) <= urgent ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}>
+                  {r.consumable_types?.name}{r.percent !== null && ` ${r.percent}%`}{r.status && ` ${r.status}`}
                 </span>
               ))}
             </div>
           </Link>
         ))}
       </section>
+
+      <MachineSearch machines={(machines ?? []) as unknown as Row[]} />
 
       <nav className="grid grid-cols-2 gap-2">
         {menu.map((m) => (

@@ -7,7 +7,11 @@ import { addPartReplacement, deletePartReplacement, saveMachine } from "../actio
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const won = (n: number | null | undefined) => (n ?? 0).toLocaleString("ko-KR");
 type Contract = { starts_on: string; base_mono: number; base_color: number; monthly_fee: number; over_mono_price: number; over_color_price: number };
-type Replacement = { id: number; replaced_on: string; counter_at: number | null; memo: string | null; part_types: { name: string } | null; staff: { name: string } | null };
+type Latest = {
+  inspected_on: string; mono_usage: number | null; color_usage: number | null;
+  consumable_readings: { percent: number | null; status: string | null; consumable_types: { name: string; sort: number } | null }[];
+};
+type Replacement ={ id: number; replaced_on: string; counter_at: number | null; memo: string | null; part_types: { name: string } | null; staff: { name: string } | null };
 
 // /machines/new?client=ID 도 이 화면
 export default async function MachinePage({ params, searchParams }: PageProps<"/machines/[id]">) {
@@ -19,8 +23,11 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
 
   const [{ data: m }, { data: clients }, { data: staff }] = await Promise.all([
     isNew ? Promise.resolve({ data: null }) : supabase.from("machines")
-      .select("*, clients(name), contracts(*), part_replacements(*, part_types(name), staff(name))")
-      .eq("id", id).single(),
+      .select("*, clients(name), contracts(*), part_replacements(*, part_types(name), staff(name)), inspections(inspected_on, mono_usage, color_usage, consumable_readings(percent, status, consumable_types(name, sort)))")
+      .eq("id", id)
+      .order("inspected_on", { referencedTable: "inspections", ascending: false })
+      .limit(1, { referencedTable: "inspections" })
+      .single(),
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("staff").select("id, name").eq("active", true).order("name"),
   ]);
@@ -35,6 +42,8 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
   const parts = (partTypes ?? []).filter((p) =>
     (p.applies_to === "both" || p.applies_to === colorType) && (p.tray_no === null || p.tray_no <= m!.tray_count));
   const history = ((m?.part_replacements ?? []) as Replacement[]).toSorted((a, b) => b.replaced_on.localeCompare(a.replaced_on));
+  const latest = (m?.inspections as Latest[] | undefined)?.[0];
+  const readings = (latest?.consumable_readings ?? []).toSorted((a, b) => (a.consumable_types?.sort ?? 0) - (b.consumable_types?.sort ?? 0));
 
   return (
     <Page
@@ -43,6 +52,29 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
       error={sp.error as string | undefined}
     >
       {sp.saved && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-700">저장했습니다.</p>}
+
+      {!isNew && (
+        <section className="card flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-semibold">최근 소모품{latest && ` · ${latest.inspected_on}`}</h2>
+            <Link href={`/inspect?q=${encodeURIComponent(m!.serial)}`} className="shrink-0 text-sm font-semibold text-blue-600">📷 사진 올리기</Link>
+          </div>
+          {readings.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {readings.map((r) => (
+                <span key={r.consumable_types?.name} className="rounded-full bg-gray-100 px-2.5 py-1 text-sm">
+                  {r.consumable_types?.name}{r.percent !== null && ` ${r.percent}%`}{r.status && ` ${r.status}`}
+                </span>
+              ))}
+            </div>
+          ) : <p className="text-sm text-gray-500">소모품 기록이 없습니다.</p>}
+          {latest?.mono_usage != null && (
+            <p className="text-sm text-gray-600">
+              지난 정기점검 대비 흑백 {won(latest.mono_usage)}매{latest.color_usage != null && ` · 칼라 ${won(latest.color_usage)}매`} 사용
+            </p>
+          )}
+        </section>
+      )}
 
       <form action={saveMachine} className="flex flex-col gap-3">
         {!isNew && <input type="hidden" name="id" value={id} />}
