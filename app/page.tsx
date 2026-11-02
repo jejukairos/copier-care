@@ -46,10 +46,7 @@ export default async function Home() {
 
   const menu = [
     { href: "/clients", icon: "🏢", label: "거래처 · 기계" },
-    ...(isAdmin ? [
-      { href: "/staff", icon: "👤", label: "직원 명단" },
-      { href: "/settings/items", icon: "⚙️", label: "소모품 · 부품 항목" },
-    ] : []),
+    ...(isAdmin ? [{ href: "/settings/items", icon: "⚙️", label: "소모품 · 부품 항목" }] : []),
   ];
 
   return (

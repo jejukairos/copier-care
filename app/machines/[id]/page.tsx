@@ -3,14 +3,11 @@ import { notFound } from "next/navigation";
 import { Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 import { addPartReplacement, deletePartReplacement, saveMachine } from "../actions";
+import { Consumables, type Latest } from "../consumables";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const won = (n: number | null | undefined) => (n ?? 0).toLocaleString("ko-KR");
 type Contract = { starts_on: string; base_mono: number; base_color: number; monthly_fee: number; over_mono_price: number; over_color_price: number };
-type Latest = {
-  inspected_on: string; mono_usage: number | null; color_usage: number | null;
-  consumable_readings: { percent: number | null; status: string | null; consumable_types: { name: string; sort: number } | null }[];
-};
 type Replacement ={ id: number; replaced_on: string; counter_at: number | null; memo: string | null; part_types: { name: string } | null; staff: { name: string } | null };
 
 // /machines/new?client=ID 도 이 화면
@@ -42,8 +39,6 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
   const parts = (partTypes ?? []).filter((p) =>
     (p.applies_to === "both" || p.applies_to === colorType) && (p.tray_no === null || p.tray_no <= m!.tray_count));
   const history = ((m?.part_replacements ?? []) as Replacement[]).toSorted((a, b) => b.replaced_on.localeCompare(a.replaced_on));
-  const latest = (m?.inspections as Latest[] | undefined)?.[0];
-  const readings = (latest?.consumable_readings ?? []).toSorted((a, b) => (a.consumable_types?.sort ?? 0) - (b.consumable_types?.sort ?? 0));
 
   return (
     <Page
@@ -53,30 +48,12 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
     >
       {sp.saved && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-700">저장했습니다.</p>}
 
-      {!isNew && (
-        <section className="card flex flex-col gap-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className="font-semibold">최근 소모품{latest && ` · ${latest.inspected_on}`}</h2>
-            <Link href={`/inspect?q=${encodeURIComponent(m!.serial)}`} className="shrink-0 text-sm font-semibold text-blue-600">📷 사진 올리기</Link>
-          </div>
-          {readings.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {readings.map((r) => (
-                <span key={r.consumable_types?.name} className="rounded-full bg-gray-100 px-2.5 py-1 text-sm">
-                  {r.consumable_types?.name}{r.percent !== null && ` ${r.percent}%`}{r.status && ` ${r.status}`}
-                </span>
-              ))}
-            </div>
-          ) : <p className="text-sm text-gray-500">소모품 기록이 없습니다.</p>}
-          {latest?.mono_usage != null && (
-            <p className="text-sm text-gray-600">
-              지난 정기점검 대비 흑백 {won(latest.mono_usage)}매{latest.color_usage != null && ` · 칼라 ${won(latest.color_usage)}매`} 사용
-            </p>
-          )}
-        </section>
-      )}
+      {!isNew && <Consumables serial={m!.serial} latest={(m!.inspections as Latest[])[0]} />}
 
-      <form action={saveMachine} className="flex flex-col gap-3">
+      {/* 평소엔 소모품만 보이게, 기계 정보·계약은 접어둠 */}
+      <details open={isNew}>
+        <summary className="text-sm text-gray-500">기계 정보 · 계약 조건 수정</summary>
+      <form action={saveMachine} className="mt-3 flex flex-col gap-3">
         {!isNew && <input type="hidden" name="id" value={id} />}
         <label className="label">기계번호 *<input name="serial" required defaultValue={m?.serial} className="input uppercase" /></label>
         <label className="label">거래처 *
@@ -140,6 +117,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
         )}
         <button className="btn">저장</button>
       </form>
+      </details>
 
       {!isNew && (
         <section id="parts" className="flex flex-col gap-3">
