@@ -81,7 +81,7 @@ export async function Consumables({ machineId, serial, latest }: { machineId: nu
             {g.days !== null && <span className="text-gray-500"> — 평균 {g.days}일{g.pages !== null && ` · ${won(g.pages)}매`}마다</span>}
           </p>
         ))}
-        {groups.length === 0 && <p className="text-gray-500">교체 기록이 없습니다. 입력 화면 맨 아래에서 교체한 소모품을 체크하세요.</p>}
+        {groups.length === 0 && <p className="text-gray-500">아직 교체 기록이 없습니다. (%가 지난번보다 30 이상 오르거나 상태가 &apos;교체…&apos;→&apos;양호&apos;로 바뀌면 자동 기록)</p>}
       </div>
     </section>
   );

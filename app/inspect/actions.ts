@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { num, str } from "@/lib/page";
+import { isReplaced } from "./replaced";
 
 export async function saveInspection(form: FormData) {
   const supabase = await createClient();
@@ -19,14 +20,24 @@ export async function saveInspection(form: FormData) {
   const memo = str(form, "memo");
   const photos = form.getAll("photo").map(String).filter((p) => p.startsWith(`${machineId}/`));
 
-  // 입력칸 p_{소모품id} = %, s_{소모품id} = 상태(양호 등), r_{소모품id} = 이번에 교체(체크). 셋 다 비면 기록 안 함
-  const typeIds = new Set([...form.keys()].filter((k) => /^[psr]_\d+$/.test(k)).map((k) => Number(k.slice(2))));
-  const replaced = [...typeIds].filter((id) => form.has(`r_${id}`));
-  const readings = [...typeIds]
+  // 입력칸 p_{소모품id} = %, s_{소모품id} = 상태(양호 등). 둘 다 비면 기록 안 함
+  const typeIds = new Set([...form.keys()].filter((k) => /^[ps]_\d+$/.test(k)).map((k) => Number(k.slice(2))));
+  const entered = [...typeIds]
     .map((id) => ({ consumable_type_id: id, percent: num(form, `p_${id}`), status: str(form, `s_${id}`) }))
-    .filter((r) => r.percent !== null || r.status !== null || replaced.includes(r.consumable_type_id));
-  if (readings.some((r) => r.percent !== null && !(Number.isInteger(r.percent) && r.percent >= 0 && r.percent <= 100)))
+    .filter((r) => r.percent !== null || r.status !== null);
+  if (entered.some((r) => r.percent !== null && !(Number.isInteger(r.percent) && r.percent >= 0 && r.percent <= 100)))
     fail("소모품 %는 0~100 사이 숫자로 입력하세요.");
+
+  // 교체 자동 판단: 소모품별 직전 기록과 비교
+  const { data: before } = await supabase.from("consumable_readings")
+    .select("consumable_type_id, percent, status, inspections!inner(inspected_on, machine_id)")
+    .eq("inspections.machine_id", machineId!).lt("inspections.inspected_on", on);
+  const prevOf = new Map<number, { percent: number | null; status: string | null; on: string }>();
+  for (const b of (before ?? []) as unknown as { consumable_type_id: number; percent: number | null; status: string | null; inspections: { inspected_on: string } }[]) {
+    const p = prevOf.get(b.consumable_type_id);
+    if (!p || b.inspections.inspected_on > p.on) prevOf.set(b.consumable_type_id, { ...b, on: b.inspections.inspected_on });
+  }
+  const readings = entered.map((r) => ({ ...r, replaced: isReplaced(prevOf.get(r.consumable_type_id), r) }));
   if ([mono, color].some((v) => v !== null && !(Number.isInteger(v) && v >= 0))) fail("카운터는 숫자로 입력하세요.");
   if (!readings.length && mono === null && color === null && !photos.length) fail("입력한 내용이 없습니다.");
 
@@ -64,11 +75,6 @@ export async function saveInspection(form: FormData) {
   if (readings.length) {
     const { error: e } = await supabase.from("consumable_readings").upsert(readings.map((r) => ({ ...r, inspection_id: saved.id })));
     if (e) fail("점검은 저장됐지만 소모품 저장 실패: " + e.message);
-  }
-  if (replaced.length) {
-    const { error: e } = await supabase.from("consumable_readings").update({ replaced: true })
-      .eq("inspection_id", saved.id).in("consumable_type_id", replaced);
-    if (e) fail("점검은 저장됐지만 교체 기록 실패: " + e.message);
   }
   if (photos.length) {
     const { error: e } = await supabase.from("inspection_photos").insert(photos.map((path) => ({ inspection_id: saved.id, path })));

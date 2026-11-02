@@ -75,7 +75,7 @@ profiles(이름, 휴대폰, role, active) / clients / machines(기계번호 UNIQ
   - **(2026-10-29) GitHub 저장소 공개 전환**(비공개는 Actions가 결제 문제로 막힘). 사진 자동 읽기는 **Gemini 무료 API**(Claude API 대신, 사용자 결정): `GEMINI_API_KEY`를 Netlify 환경변수에 사용자가 직접 입력 → 재배포 필요. 사진 올리면 자동 호출, 빈 칸만 노란색으로 채움, 한도 초과·오류 시 다음 모델 → 실패하면 직접 입력. 무료 티어는 Google이 입력을 학습에 쓸 수 있음(사용자에게 고지).
   - **(2026-11-02) 로그인 화면 빼달라 요청** → `proxy.ts`가 Netlify 환경변수 `SHARED_LOGIN_EMAIL/PASSWORD` 공용계정으로 자동 로그인(없으면 기존 로그인 화면). 주소 아는 누구나 접근 가능함을 고지함. 사용자가 Netlify에 값 넣었다고 하면 재배포(`gh run rerun`) 필요.
   - **(2026-11-02) 화면 단순화**: 거래처 들어가면 첫 기계(여러 대면 위 버튼으로 선택) 소모품 "K 25% · 토너회수통 양호" 바로 표시(`app/machines/consumables.tsx`), 거래처·기계 정보·계약은 접기, 홈의 직원 명단 메뉴 제거. 교체일 "(26.10.7 교체)"은 지금은 상태칸에 직접 적는 방식.
-  - **(2026-11-02) 기종별 카운터 항목 확정**(`app/inspect/counters.ts`, 후지 DCSC는 1=칼라·2=흑백 확인됨), 입력화면 점검자 제거, 맨 아래 "이번에 교체한 소모품" 체크 → `consumable_readings.replaced`(`0004_reading_replaced.sql`, 사용자 적용 필요) → 소모품 카드에 "(26.10.07 교체)"와 교체 이력·평균 주기(일·매수).
+  - **(2026-11-02) 기종별 카운터 항목 확정**(`app/inspect/counters.ts`, 후지 DCSC는 1=칼라·2=흑백 확인됨), 입력화면 점검자 제거, 교체는 체크칸 없이 **저장 시 자동 판단**(`app/inspect/replaced.ts`: 직전 대비 % 30↑ 또는 상태 '…교체…'→다른 값) → `consumable_readings.replaced`(`0004_reading_replaced.sql`, 적용 완료) → 소모품 카드에 "(26.10.07 교체)"와 교체 이력·평균 주기(일·매수).
 - [ ] ④ 대시보드·검색·기계 상세·월별 리포트·엑셀
 - [ ] ⑤ 웹 푸시 알림 + 아침 8시(KST) 요약 + 중복 방지
 - [ ] ⑥ GitHub + Netlify 배포 (가입은 이때 안내)

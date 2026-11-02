@@ -169,18 +169,6 @@ export function InspectForm({ machine, types, last, today, ai }: {
         </label>
       </div>
       <label className="label">메모<textarea name="memo" rows={2} className="input" /></label>
-
-      {/* 교체 주기 계산용: 체크한 날이 교체일로 기록됨 */}
-      <section className="card flex flex-col gap-2">
-        <h2 className="font-semibold">이번에 교체한 소모품</h2>
-        <div className="flex flex-wrap gap-2">
-          {types.map((t) => (
-            <label key={t.id} className="flex items-center gap-1.5 rounded-full border border-gray-300 px-3 py-1.5 text-sm has-checked:border-blue-600 has-checked:bg-blue-50">
-              <input type="checkbox" name={`r_${t.id}`} className="size-4" />{t.name.replace(/^토너 /, "")}
-            </label>
-          ))}
-        </div>
-      </section>
       <SaveButton uploading={uploading > 0} />
     </form>
   );
