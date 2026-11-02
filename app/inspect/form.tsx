@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { counterGuide } from "./counters";
 import { useFormStatus } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { saveInspection } from "./actions";
@@ -26,25 +27,16 @@ function SaveButton({ uploading }: { uploading: boolean }) {
   return <button disabled={uploading || pending} className="btn">{pending ? "저장 중…" : uploading ? "사진 올리는 중…" : "저장"}</button>;
 }
 
-export function InspectForm({ machine, types, last, staff, today, ai }: {
-  machine: { id: number; serial: string; color: boolean }; types: Type[]; last: Last; staff: { id: number; name: string }[]; today: string; ai: boolean;
+export function InspectForm({ machine, types, last, today, ai }: {
+  machine: { id: number; serial: string; model: string; color: boolean }; types: Type[]; last: Last; today: string; ai: boolean;
 }) {
   const [photos, setPhotos] = useState<{ url: string; path: string }[]>([]);
   const [uploading, setUploading] = useState(0);
   const [photoError, setPhotoError] = useState("");
   const [aiNote, setAiNote] = useState("");
-  const inspector = useRef<HTMLSelectElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const prev = new Map(last?.consumable_readings.map((r) => [r.consumable_type_id, r]));
-
-  // 이 휴대폰에서 마지막으로 고른 점검자를 기본값으로
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem("inspector");
-      const sel = inspector.current;
-      if (v && sel && [...sel.options].some((o) => o.value === v)) sel.value = v;
-    } catch {}
-  }, []);
+  const guide = counterGuide(machine.model);
 
   // 사진은 서버를 거치지 않고 Supabase Storage로 바로 올림 (Netlify 사용량 절약)
   // shortcut: 올린 뒤 저장 안 하고 나가면 사진이 저장소에 남음, 용량이 문제 되면 정리 기능에서 같이 지울 것
@@ -101,9 +93,7 @@ export function InspectForm({ machine, types, last, staff, today, ai }: {
     if ((down("mono_counter") || down("color_counter")) && !String(f.get("memo") ?? "").trim()) {
       e.preventDefault();
       alert("카운터가 지난번보다 작습니다. 이유를 메모에 적어주세요.");
-      return;
     }
-    try { localStorage.setItem("inspector", String(f.get("inspector_id") ?? "")); } catch {}
   }
 
   const row = (t: Type) => {
@@ -162,8 +152,10 @@ export function InspectForm({ machine, types, last, staff, today, ai }: {
       <section className="card flex flex-col gap-2">
         <h2 className="font-semibold">사용 매수 (카운터)</h2>
         <div className="grid grid-cols-2 gap-3">
-          <label className="label">흑백<input name="mono_counter" inputMode="numeric" placeholder={fmt(last?.mono_counter)} className="input" /></label>
-          {machine.color && <label className="label">칼라<input name="color_counter" inputMode="numeric" placeholder={fmt(last?.color_counter)} className="input" /></label>}
+          <label className="label">흑백{guide && <span className="text-xs text-gray-400">사진의 &apos;{guide.mono}&apos;</span>}
+            <input name="mono_counter" inputMode="numeric" placeholder={fmt(last?.mono_counter)} className="input" /></label>
+          {machine.color && <label className="label">칼라{guide?.color && <span className="text-xs text-gray-400">사진의 &apos;{guide.color}&apos;</span>}
+            <input name="color_counter" inputMode="numeric" placeholder={fmt(last?.color_counter)} className="input" /></label>}
         </div>
       </section>
 
@@ -176,13 +168,19 @@ export function InspectForm({ machine, types, last, staff, today, ai }: {
           </select>
         </label>
       </div>
-      <label className="label">점검자
-        <select ref={inspector} name="inspector_id" className="input">
-          <option value="">선택 안 함</option>
-          {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </label>
       <label className="label">메모<textarea name="memo" rows={2} className="input" /></label>
+
+      {/* 교체 주기 계산용: 체크한 날이 교체일로 기록됨 */}
+      <section className="card flex flex-col gap-2">
+        <h2 className="font-semibold">이번에 교체한 소모품</h2>
+        <div className="flex flex-wrap gap-2">
+          {types.map((t) => (
+            <label key={t.id} className="flex items-center gap-1.5 rounded-full border border-gray-300 px-3 py-1.5 text-sm has-checked:border-blue-600 has-checked:bg-blue-50">
+              <input type="checkbox" name={`r_${t.id}`} className="size-4" />{t.name.replace(/^토너 /, "")}
+            </label>
+          ))}
+        </div>
+      </section>
       <SaveButton uploading={uploading > 0} />
     </form>
   );

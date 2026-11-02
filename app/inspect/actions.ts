@@ -19,11 +19,12 @@ export async function saveInspection(form: FormData) {
   const memo = str(form, "memo");
   const photos = form.getAll("photo").map(String).filter((p) => p.startsWith(`${machineId}/`));
 
-  // 입력칸 p_{소모품id} = %, s_{소모품id} = 상태(양호 등). 둘 다 비면 기록 안 함
-  const typeIds = new Set([...form.keys()].filter((k) => /^[ps]_\d+$/.test(k)).map((k) => Number(k.slice(2))));
+  // 입력칸 p_{소모품id} = %, s_{소모품id} = 상태(양호 등), r_{소모품id} = 이번에 교체(체크). 셋 다 비면 기록 안 함
+  const typeIds = new Set([...form.keys()].filter((k) => /^[psr]_\d+$/.test(k)).map((k) => Number(k.slice(2))));
+  const replaced = [...typeIds].filter((id) => form.has(`r_${id}`));
   const readings = [...typeIds]
     .map((id) => ({ consumable_type_id: id, percent: num(form, `p_${id}`), status: str(form, `s_${id}`) }))
-    .filter((r) => r.percent !== null || r.status !== null);
+    .filter((r) => r.percent !== null || r.status !== null || replaced.includes(r.consumable_type_id));
   if (readings.some((r) => r.percent !== null && !(Number.isInteger(r.percent) && r.percent >= 0 && r.percent <= 100)))
     fail("소모품 %는 0~100 사이 숫자로 입력하세요.");
   if ([mono, color].some((v) => v !== null && !(Number.isInteger(v) && v >= 0))) fail("카운터는 숫자로 입력하세요.");
@@ -48,7 +49,7 @@ export async function saveInspection(form: FormData) {
     machine_id: machineId, inspected_on: on, kind, period_month: period,
     mono_counter: mono, color_counter: color,
     mono_usage: usage(mono, prevReg?.mono_counter), color_usage: usage(color, prevReg?.color_counter),
-    inspector_id: num(form, "inspector_id"), memo,
+    memo,
   };
 
   // 같은 달 정기점검을 다시 올리면 새로 만들지 않고 그 기록에 덧씀 (이번에 비운 칸은 지난 값 유지)
@@ -63,6 +64,11 @@ export async function saveInspection(form: FormData) {
   if (readings.length) {
     const { error: e } = await supabase.from("consumable_readings").upsert(readings.map((r) => ({ ...r, inspection_id: saved.id })));
     if (e) fail("점검은 저장됐지만 소모품 저장 실패: " + e.message);
+  }
+  if (replaced.length) {
+    const { error: e } = await supabase.from("consumable_readings").update({ replaced: true })
+      .eq("inspection_id", saved.id).in("consumable_type_id", replaced);
+    if (e) fail("점검은 저장됐지만 교체 기록 실패: " + e.message);
   }
   if (photos.length) {
     const { error: e } = await supabase.from("inspection_photos").insert(photos.map((path) => ({ inspection_id: saved.id, path })));

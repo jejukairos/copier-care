@@ -59,7 +59,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                 <p className="text-lg font-bold">{sel.serial} <span className="text-sm font-normal text-gray-500">{sel.color_type === "color" ? "컬러" : "흑백"} · {sel.model}{sel.active ? "" : " · 사용 안 함"}</span></p>
                 <Link href={`/machines/${sel.id}`} className="shrink-0 text-sm text-gray-500">기계 정보 ›</Link>
               </div>
-              <Consumables serial={sel.serial} latest={latest as Latest} />
+              <Consumables machineId={sel.id} serial={sel.serial} latest={latest as Latest} />
             </>
           ) : <p className="card text-sm text-gray-500">등록된 기계가 없습니다.</p>}
 

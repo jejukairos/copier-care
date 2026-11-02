@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, getMe } from "@/lib/supabase/server";
+import { COUNTER_RULES, counterGuide } from "./counters";
 
 export type Recognized = {
   serial: string | null; mono_counter: number | null; color_counter: number | null;
@@ -10,8 +11,6 @@ type Raw = { serial?: unknown; mono_counter?: unknown; color_counter?: unknown; 
 
 // 무료 한도가 모델별로 따로라, 앞 모델이 한도 초과·오류면 다음 모델로
 const MODELS = [process.env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite"];
-// shortcut: 후지 "사용 매수 1~4"는 1=칼라, 2=흑백으로 가정 (사용자 확인 전). 반대면 이 줄만 바꿀 것
-const FUJI = "1=칼라, 2=흑백";
 
 const int = (v: unknown, max = Number.MAX_SAFE_INTEGER) => {
   const n = typeof v === "string" ? Number(v.replace(/[,\s%]/g, "")) : v;
@@ -27,7 +26,7 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
   paths = paths.filter((p) => p.startsWith(`${machineId}/`)).slice(0, 4);
 
   const supabase = await createClient();
-  const { data: m } = await supabase.from("machines").select("color_type").eq("id", machineId).single();
+  const { data: m } = await supabase.from("machines").select("color_type, model").eq("id", machineId).single();
   if (!m || !paths.length) return { error: "기계나 사진을 찾을 수 없습니다." };
   const [{ data: types }, files] = await Promise.all([
     supabase.from("consumable_types").select("id, name").eq("applies_to", m.color_type).eq("active", true).order("sort"),
@@ -36,11 +35,15 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
   const images = await Promise.all(files.flatMap((f) => (f.data ? [f.data.arrayBuffer()] : [])));
   const ids = new Set((types ?? []).map((t) => t.id));
 
+  const guide = counterGuide(m.model);
   const prompt = [
-    `복사기 화면 사진입니다 (${m.color_type === "color" ? "컬러기" : "흑백기"}). 사진에 보이는 값만 읽어 JSON 하나로만 답하세요. 안 보이거나 확실하지 않은 값은 null.`,
+    `복사기 화면 사진입니다 (기종 ${m.model}, ${m.color_type === "color" ? "컬러기" : "흑백기"}). 사진에 보이는 값만 읽어 JSON 하나로만 답하세요. 안 보이거나 확실하지 않은 값은 null.`,
     `형식: {"serial": 문자열|null, "mono_counter": 정수|null, "color_counter": 정수|null, "items": [{"id": 소모품번호, "percent": 0~100 정수|null, "status": 문자열|null}]}`,
     `- serial: 화면에 보이는 기계번호(보통 6자리 숫자).`,
-    `- 카운터: 흑백·칼라 누적 사용 매수. "흑백 임프레션"/"컬러 임프레션" 값을 쓰고 "총", "컬러 큰 크기"는 쓰지 않음. 후지 "사용 매수 1~4" 화면은 ${FUJI} (4는 합계라 안 씀). 흑백기는 흑백 매수만 mono_counter에.`,
+    `- 카운터: 흑백·칼라 누적 사용 매수. 큰 크기(A3)·합계 값은 쓰지 않음 (흑백기는 예외). 기종별 화면 항목:`,
+    COUNTER_RULES,
+    ...(guide ? [`  → 이 기계는 mono_counter="${guide.mono}"${guide.color ? `, color_counter="${guide.color}"` : ""} 값.`] : []),
+    `  흑백기는 흑백 매수만 mono_counter에.`,
     `- items: 아래 목록 중 사진에 보이는 소모품만. 토너 K/C/M/Y = 검정/청록/자홍/노랑. 토너회수통은 R5로 나오기도 함. status는 "양호", "소모품교체준비"처럼 화면에 적힌 글자 그대로, %만 있으면 null.`,
     ...(types ?? []).map((t) => `  ${t.id}: ${t.name}`),
   ].join("\n");

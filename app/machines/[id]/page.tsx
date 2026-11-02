@@ -48,7 +48,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
     >
       {sp.saved && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-700">저장했습니다.</p>}
 
-      {!isNew && <Consumables serial={m!.serial} latest={(m!.inspections as Latest[])[0]} />}
+      {!isNew && <Consumables machineId={m!.id} serial={m!.serial} latest={(m!.inspections as Latest[])[0]} />}
 
       {/* 평소엔 소모품만 보이게, 기계 정보·계약은 접어둠 */}
       <details open={isNew}>

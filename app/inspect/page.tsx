@@ -41,20 +41,19 @@ export default async function InspectPage({ searchParams }: PageProps<"/inspect"
   }
 
   const m = hits[0];
-  const [{ data: types }, { data: last }, { data: staff }] = await Promise.all([
+  const [{ data: types }, { data: last }] = await Promise.all([
     supabase.from("consumable_types").select("id, name, is_main").eq("applies_to", m.color_type).eq("active", true).order("sort"),
     supabase.from("inspections")
       .select("inspected_on, mono_counter, color_counter, consumable_readings(consumable_type_id, percent, status)")
       .eq("machine_id", m.id).order("inspected_on", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("staff").select("id, name").eq("active", true).order("name"),
   ]);
 
   return (
     <Page title={m.serial} back="/" error={error}>
       <p className="-mt-2 text-sm text-gray-600">{m.clients?.name} · {m.model}</p>
       <InspectForm
-        machine={{ id: m.id, serial: m.serial, color: m.color_type === "color" }}
-        types={types ?? []} last={last as Last} staff={staff ?? []}
+        machine={{ id: m.id, serial: m.serial, model: m.model, color: m.color_type === "color" }}
+        types={types ?? []} last={last as Last}
         today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
         ai={!!process.env.GEMINI_API_KEY}
       />
