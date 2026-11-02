@@ -20,7 +20,17 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let { data: { user } } = await supabase.auth.getUser();
+  // 로그인 화면 없이 쓰기: 세션이 없으면 Netlify 환경변수의 공용계정으로 자동 로그인 (실패하면 기존 로그인 화면)
+  const email = process.env.SHARED_LOGIN_EMAIL, password = process.env.SHARED_LOGIN_PASSWORD;
+  if (!user && email && password) {
+    ({ data: { user } } = await supabase.auth.signInWithPassword({ email, password }));
+    if (user && request.nextUrl.pathname.startsWith("/login")) {
+      const go = NextResponse.redirect(new URL("/", request.url));
+      response.cookies.getAll().forEach((c) => go.cookies.set(c));
+      return go;
+    }
+  }
   if (!user && !request.nextUrl.pathname.startsWith("/login")) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
