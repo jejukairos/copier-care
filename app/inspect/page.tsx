@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Page, requireMe } from "@/lib/page";
+import { matches, Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 import { InspectForm, type Last } from "./form";
 import { MachineSearch } from "./search";
@@ -18,8 +18,7 @@ export default async function InspectPage({ searchParams }: PageProps<"/inspect"
   const { data } = await supabase.from("machines").select("id, serial, model, color_type, clients(name)").eq("active", true).order("serial");
   const all = (data ?? []) as unknown as M[];
   const exact = all.filter((m) => m.serial.toUpperCase() === q);
-  const hits = exact.length ? exact
-    : q ? all.filter((m) => m.serial.toUpperCase().includes(q) || m.clients?.name.toUpperCase().includes(q)) : [];
+  const hits = exact.length ? exact : q ? all.filter((m) => matches(q, m.serial, m.clients?.name)) : [];
 
   if (hits.length !== 1) {
     return (

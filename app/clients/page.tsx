@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Page, requireMe } from "@/lib/page";
+import { matches, Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ClientsPage({ searchParams }: PageProps<"/clients">) {
@@ -7,18 +7,10 @@ export default async function ClientsPage({ searchParams }: PageProps<"/clients"
   const q = String((await searchParams).q ?? "").trim();
   const supabase = await createClient();
 
-  // 회사명 또는 기계번호 부분 일치
-  let clientIds: number[] | null = null;
-  if (q) {
-    const { data: ms } = await supabase.from("machines").select("client_id").ilike("serial", `%${q}%`);
-    clientIds = (ms ?? []).map((m) => m.client_id);
-  }
-  let query = supabase.from("clients").select("id, name, contact_name, machines(serial, active)").order("name");
-  if (q) {
-    const like = `name.ilike.%${q.replace(/[,()]/g, "")}%`;
-    query = query.or(clientIds?.length ? `${like},id.in.(${clientIds.join(",")})` : like);
-  }
-  const { data: clients } = await query;
+  // 회사명 또는 기계번호 일부 (띄어쓰기 무시)
+  // shortcut: 거래처 전체를 받아 걸러냄. 수천 곳이 넘으면 DB 검색으로 바꿀 것
+  const { data: all } = await supabase.from("clients").select("id, name, contact_name, machines(serial, active)").order("name");
+  const clients = q ? all?.filter((c) => matches(q, c.name, ...c.machines.map((m) => m.serial))) : all;
 
   return (
     <Page title="거래처 · 기계" back="/" right={<Link href="/clients/new" className="btn py-2 text-sm">+ 거래처</Link>}>

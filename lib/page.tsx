@@ -27,6 +27,10 @@ export function Page({ title, back, right, error, children }: {
   );
 }
 
+// 검색: 띄어쓰기·대소문자 무시하고 일부만 맞아도 찾음 ("디자인" → "디자인 두잉")
+const squash = (s: string) => s.replace(/\s/g, "").toUpperCase();
+export const matches = (q: string, ...texts: (string | null | undefined)[]) => texts.some((t) => t && squash(t).includes(squash(q)));
+
 // 폼 값 꺼내기: 빈 칸은 null
 export const str = (f: FormData, k: string) => (String(f.get(k) ?? "").trim() || null);
 export const num = (f: FormData, k: string) => { const v = str(f, k); return v === null ? null : Number(v.replace(/,/g, "")); };
