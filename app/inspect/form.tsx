@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { counterGuide } from "./counters";
+import { counterGuide, extraCounters } from "./counters";
 import { useFormStatus } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { saveInspection } from "./actions";
@@ -9,7 +9,10 @@ import { recognizePhotos, type Recognized } from "./recognize";
 
 type Type = { id: number; name: string; is_main: boolean };
 type Reading = { consumable_type_id: number; percent: number | null; status: string | null };
-export type Last = { inspected_on: string; mono_counter: number | null; color_counter: number | null; consumable_readings: Reading[] } | null;
+export type Last = {
+  inspected_on: string; mono_counter: number | null; color_counter: number | null; extra_counters: Record<string, number> | null;
+  consumable_readings: Reading[];
+} | null;
 
 // 휴대폰 사진(수 MB)을 긴 변 1600px JPEG로 줄임 → 약 200~300KB, 카운터 숫자는 읽힐 정도
 async function shrink(file: File) {
@@ -37,6 +40,17 @@ export function InspectForm({ machine, types, last, today, ai }: {
   const formRef = useRef<HTMLFormElement>(null);
   const prev = new Map(last?.consumable_readings.map((r) => [r.consumable_type_id, r]));
   const guide = counterGuide(machine.model);
+  // 카운터 4칸: 흑백·칼라 + 기종별 나머지 칸(c_칸이름). 지난번 대비 차이를 입력하는 대로 보여줌
+  const counters = [
+    { name: "mono_counter", label: "흑백", hint: guide?.mono, last: last?.mono_counter },
+    ...(machine.color ? [{ name: "color_counter", label: "칼라", hint: guide?.color, last: last?.color_counter }] : []),
+    ...extraCounters(machine.model, machine.color).map((x) => ({ name: `c_${x}`, label: x, hint: undefined, last: last?.extra_counters?.[x] })),
+  ];
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const syncCounters = () => setTyped(Object.fromEntries(counters.map((c) => {
+    const el = formRef.current?.elements.namedItem(c.name);
+    return [c.name, el instanceof HTMLInputElement ? el.value : ""];
+  })));
 
   // 사진은 서버를 거치지 않고 Supabase Storage로 바로 올림 (Netlify 사용량 절약)
   // shortcut: 올린 뒤 저장 안 하고 나가면 사진이 저장소에 남음, 용량이 문제 되면 정리 기능에서 같이 지울 것
@@ -78,6 +92,8 @@ export function InspectForm({ machine, types, last, today, ai }: {
     };
     put("mono_counter", r.mono_counter);
     put("color_counter", r.color_counter);
+    Object.entries(r.extra).forEach(([k, v]) => put(`c_${k}`, v));
+    syncCounters();
     r.items.forEach((i) => { put(`p_${i.id}`, i.percent); put(`s_${i.id}`, i.status); });
     const other = r.serial && r.serial !== machine.serial.toUpperCase() ? ` ⚠️ 사진 속 기계번호 ${r.serial}가 ${machine.serial}와 다릅니다!` : "";
     setAiNote((filled ? `✓ ${filled}칸 자동 입력 (노란 칸). 사진과 맞는지 확인 후 저장하세요.` : "읽은 값이 없습니다. 직접 입력해 주세요.") + other);
@@ -103,7 +119,7 @@ export function InspectForm({ machine, types, last, today, ai }: {
         <span className="text-sm font-semibold">{t.name}</span>
         <input name={`p_${t.id}`} type="number" inputMode="numeric" min={0} max={100} aria-label={`${t.name} %`}
           placeholder={p?.percent != null ? `${p.percent}%` : "%"} className="input px-2" />
-        <input name={`s_${t.id}`} aria-label={`${t.name} 상태`} placeholder={p?.status ?? "양호 등"} className="input px-2" />
+        <input name={`s_${t.id}`} list="status-options" aria-label={`${t.name} 상태`} placeholder={p?.status ?? "양호 · 여유분"} className="input px-2" />
       </div>
     );
   };
@@ -140,6 +156,8 @@ export function InspectForm({ machine, types, last, today, ai }: {
           <h2 className="font-semibold">소모품</h2>
           <p className="text-xs text-gray-400">회색 글씨 = 지난번{last && ` (${last.inspected_on.slice(5).replace("-", "/")})`}</p>
         </div>
+        {/* 상태칸 누르면 고를 수 있는 말. '여유분'이면 대시보드에서 급하지 않은 것으로 맨 아래 */}
+        <datalist id="status-options"><option value="양호" /><option value="소모품교체준비" /><option value="여유분 있음" /></datalist>
         {main.map(row)}
         {extra.length > 0 && (
           <details>
@@ -149,13 +167,19 @@ export function InspectForm({ machine, types, last, today, ai }: {
         )}
       </section>
 
-      <section className="card flex flex-col gap-2">
+      <section className="card flex flex-col gap-2" onInput={syncCounters}>
         <h2 className="font-semibold">사용 매수 (카운터)</h2>
         <div className="grid grid-cols-2 gap-3">
-          <label className="label">흑백{guide && <span className="text-xs text-gray-400">사진의 &apos;{guide.mono}&apos;</span>}
-            <input name="mono_counter" inputMode="numeric" placeholder={fmt(last?.mono_counter)} className="input" /></label>
-          {machine.color && <label className="label">칼라{guide?.color && <span className="text-xs text-gray-400">사진의 &apos;{guide.color}&apos;</span>}
-            <input name="color_counter" inputMode="numeric" placeholder={fmt(last?.color_counter)} className="input" /></label>}
+          {counters.map((c) => {
+            const v = Number((typed[c.name] ?? "").replace(/,/g, ""));
+            const diff = typed[c.name] && Number.isFinite(v) && c.last != null ? v - c.last : null;
+            return (
+              <label key={c.name} className="label">{c.label}{c.hint && <span className="text-xs text-gray-400">사진의 &apos;{c.hint}&apos;</span>}
+                <input name={c.name} inputMode="numeric" placeholder={fmt(c.last)} className="input" />
+                {diff !== null && <span className={`text-sm font-semibold ${diff < 0 ? "text-red-600" : "text-blue-700"}`}>지난번 대비 {diff >= 0 ? "+" : ""}{fmt(diff)}</span>}
+              </label>
+            );
+          })}
         </div>
       </section>
 

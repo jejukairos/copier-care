@@ -1,13 +1,13 @@
 "use server";
 
 import { createClient, getMe } from "@/lib/supabase/server";
-import { COUNTER_RULES, counterGuide } from "./counters";
+import { COUNTER_RULES, counterGuide, extraCounters } from "./counters";
 
 export type Recognized = {
-  serial: string | null; mono_counter: number | null; color_counter: number | null;
+  serial: string | null; mono_counter: number | null; color_counter: number | null; extra: Record<string, number | null>;
   items: { id: number; percent: number | null; status: string | null }[];
 };
-type Raw = { serial?: unknown; mono_counter?: unknown; color_counter?: unknown; items?: { id?: unknown; percent?: unknown; status?: unknown }[] };
+type Raw = { serial?: unknown; mono_counter?: unknown; color_counter?: unknown; extra?: unknown; items?: { id?: unknown; percent?: unknown; status?: unknown }[] };
 
 // 무료 한도가 모델별로 따로라, 앞 모델이 한도 초과·오류면 다음 모델로
 const MODELS = [process.env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite"];
@@ -36,14 +36,15 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
   const ids = new Set((types ?? []).map((t) => t.id));
 
   const guide = counterGuide(m.model);
+  const extra = extraCounters(m.model, m.color_type === "color");
   const prompt = [
     `복사기 화면 사진입니다 (기종 ${m.model}, ${m.color_type === "color" ? "컬러기" : "흑백기"}). 사진에 보이는 값만 읽어 JSON 하나로만 답하세요. 안 보이거나 확실하지 않은 값은 null.`,
-    `형식: {"serial": 문자열|null, "mono_counter": 정수|null, "color_counter": 정수|null, "items": [{"id": 소모품번호, "percent": 0~100 정수|null, "status": 문자열|null}]}`,
+    `형식: {"serial": 문자열|null, "mono_counter": 정수|null, "color_counter": 정수|null, "extra": {${extra.map((x) => `"${x}": 정수|null`).join(", ")}}, "items": [{"id": 소모품번호, "percent": 0~100 정수|null, "status": 문자열|null}]}`,
     `- serial: 화면에 보이는 기계번호(보통 6자리 숫자).`,
-    `- 카운터: 흑백·칼라 누적 사용 매수. 큰 크기(A3)·합계 값은 쓰지 않음 (흑백기는 예외). 기종별 화면 항목:`,
+    `- 카운터: 누적 사용 매수. mono_counter=흑백, color_counter=칼라, extra=나머지 칸(큰 크기·합계 등). 기종별 화면 항목:`,
     COUNTER_RULES,
     ...(guide ? [`  → 이 기계는 mono_counter="${guide.mono}"${guide.color ? `, color_counter="${guide.color}"` : ""} 값.`] : []),
-    `  흑백기는 흑백 매수만 mono_counter에.`,
+    `  흑백기는 color_counter=null.`,
     `- items: 아래 목록 중 사진에 보이는 소모품만. 토너 K/C/M/Y = 검정/청록/자홍/노랑. 토너회수통은 R5로 나오기도 함. status는 "양호", "소모품교체준비"처럼 화면에 적힌 글자 그대로, %만 있으면 null.`,
     ...(types ?? []).map((t) => `  ${t.id}: ${t.name}`),
   ].join("\n");
@@ -76,6 +77,7 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
         serial: text(r.serial, 30)?.toUpperCase() ?? null,
         mono_counter: int(r.mono_counter),
         color_counter: int(r.color_counter),
+        extra: Object.fromEntries(extra.map((x) => [x, int((r.extra as Record<string, unknown> | undefined)?.[x])])),
         items: (Array.isArray(r.items) ? r.items : [])
           .filter((i) => ids.has(i?.id as number))
           .map((i) => ({ id: i.id as number, percent: int(i.percent, 100), status: text(i.status, 20) })),

@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { extraCounters } from "../inspect/counters";
 
 type Reading = { percent: number | null; status: string | null; consumable_types: { name: string; sort: number } | null };
 export type Latest = {
-  inspected_on: string; mono_usage?: number | null; color_usage?: number | null; consumable_readings: Reading[];
+  inspected_on: string; mono_counter: number | null; color_counter: number | null; extra_counters: Record<string, number> | null;
+  consumable_readings: Reading[];
 } | null | undefined;
+// 화면에 띄울 점검 기록: 최근 2건 (소모품 + 지난번 대비 카운터 차이)
+export const INSPECTION_FIELDS = "inspected_on, mono_counter, color_counter, extra_counters, consumable_readings(percent, status, consumable_types(name, sort))";
 
 type Rep = { consumable_types: { name: string; sort: number } | null; inspections: { inspected_on: string; mono_counter: number | null; color_counter: number | null } };
 
@@ -13,7 +17,10 @@ const short = (name = "") => name.replace(/^토너 /, "");
 const ymd = (d: string) => d.slice(2).replaceAll("-", ".");
 
 // 기계의 최근 소모품을 "K 25% · 토너회수통 양호(26.10.07 교체)"처럼 보여주고, 아래에 교체 이력·평균 주기
-export async function Consumables({ machineId, serial, latest }: { machineId: number; serial: string; latest: Latest }) {
+export async function Consumables({ machine, latest, prev }: {
+  machine: { id: number; serial: string; model: string; color: boolean }; latest: Latest; prev: Latest;
+}) {
+  const machineId = machine.id;
   const supabase = await createClient();
   const [{ data: settings }, { data: reps }] = await Promise.all([
     supabase.from("app_settings").select("key, value").in("key", ["urgent_percent", "warning_percent"]),
@@ -45,16 +52,22 @@ export async function Consumables({ machineId, serial, latest }: { machineId: nu
   const urgent = setting("urgent_percent", 10);
   const warning = setting("warning_percent", 20);
   const tone = (r: Reading) =>
-    r.percent !== null && r.percent <= urgent ? "bg-red-100 text-red-700"
+    r.status?.includes("여유") ? "bg-blue-50 text-blue-700"
+    : r.percent !== null && r.percent <= urgent ? "bg-red-100 text-red-700"
     : (r.percent !== null && r.percent <= warning) || r.status?.includes("교체") ? "bg-orange-100 text-orange-700"
     : "bg-gray-100";
   const readings = (latest?.consumable_readings ?? []).toSorted((a, b) => (a.consumable_types?.sort ?? 0) - (b.consumable_types?.sort ?? 0));
+  const counters = latest ? [
+    { label: "흑백", cur: latest.mono_counter, old: prev?.mono_counter },
+    ...(machine.color ? [{ label: "칼라", cur: latest.color_counter, old: prev?.color_counter }] : []),
+    ...extraCounters(machine.model, machine.color).map((x) => ({ label: x, cur: latest.extra_counters?.[x], old: prev?.extra_counters?.[x] })),
+  ].filter((c) => c.cur != null) : [];
 
   return (
     <section className="card flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-semibold">소모품{latest && <span className="text-sm font-normal text-gray-500"> · {latest.inspected_on.slice(2).replaceAll("-", ".")} 기준</span>}</h2>
-        <Link href={`/inspect?q=${encodeURIComponent(serial)}`} className="shrink-0 text-sm font-semibold text-blue-600">📷 사진 올리기</Link>
+        <Link href={`/inspect?q=${encodeURIComponent(machine.serial)}`} className="shrink-0 text-sm font-semibold text-blue-600">📷 사진 올리기</Link>
       </div>
       {readings.length > 0 ? (
         <div className="flex flex-wrap gap-2">
@@ -68,10 +81,23 @@ export async function Consumables({ machineId, serial, latest }: { machineId: nu
           ))}
         </div>
       ) : <p className="text-sm text-gray-500">소모품 기록이 없습니다. 📷 사진 올리기로 입력하세요.</p>}
-      {latest?.mono_usage != null && (
-        <p className="text-sm text-gray-600">
-          지난 정기점검 대비 흑백 {won(latest.mono_usage)}매{latest.color_usage != null && ` · 칼라 ${won(latest.color_usage)}매`} 사용
-        </p>
+      {counters.length > 0 && (
+        <table className="border-t border-gray-100 text-sm">
+          <caption className="pt-2 text-left font-semibold">
+            사용 매수{prev && <span className="font-normal text-gray-500"> · 지난번({ymd(prev.inspected_on)}) 대비</span>}
+          </caption>
+          <tbody>
+            {counters.map((c) => (
+              <tr key={c.label}>
+                <td className="py-0.5">{c.label}</td>
+                <td className="py-0.5 text-right">{won(c.cur!)}</td>
+                <td className={`py-0.5 pl-3 text-right font-semibold ${c.old != null && c.cur! < c.old ? "text-red-600" : "text-blue-700"}`}>
+                  {c.old != null && `${c.cur! >= c.old ? "+" : ""}${won(c.cur! - c.old)}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
       <div className="flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm">
         <p className="font-semibold">교체 이력</p>

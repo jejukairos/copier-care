@@ -32,7 +32,9 @@ export default async function Home() {
   const warning = setting("warning_percent", 20);
 
   // 기계별 가장 최근 점검의 소모품 중 주의 이하(또는 기계가 "교체" 상태 표시)만, 가장 급한 기계부터
-  const pct = (r: Reading) => r.percent ?? 0;
+  // 현장에 여유분을 두고 온 소모품(상태 '여유분')은 급하지 않으니 맨 아래로
+  const spare = (r: Reading) => !!r.status?.includes("여유");
+  const pct = (r: Reading) => (spare(r) ? 1000 : 0) + (r.percent ?? 0);
   const alerts = ((machines ?? []) as unknown as Row[])
     .map((m) => {
       const last = m.inspections[0];
@@ -71,7 +73,7 @@ export default async function Home() {
             <div className="flex flex-wrap gap-1.5">
               {m.items.map((r) => (
                 <span key={r.consumable_types?.name}
-                  className={`rounded-full px-2.5 py-1 text-sm font-semibold ${pct(r) <= urgent ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}>
+                  className={`rounded-full px-2.5 py-1 text-sm font-semibold ${spare(r) ? "bg-blue-50 text-blue-700" : pct(r) <= urgent ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}>
                   {r.consumable_types?.name}{r.percent !== null && ` ${r.percent}%`}{r.status && ` ${r.status}`}
                 </span>
               ))}

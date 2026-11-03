@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
-import { Consumables, type Latest } from "../../machines/consumables";
+import { Consumables, INSPECTION_FIELDS, type Latest } from "../../machines/consumables";
 import { saveClient } from "../actions";
 
 type M = { id: number; serial: string; model: string; color_type: string; active: boolean };
@@ -22,11 +22,11 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
 
   const machines = ((c?.machines ?? []) as M[]).toSorted((a, b) => Number(b.active) - Number(a.active) || a.id - b.id);
   const sel = machines.find((m) => String(m.id) === sp.m) ?? machines[0];
-  const { data: latest } = sel
-    ? await supabase.from("inspections")
-        .select("inspected_on, mono_usage, color_usage, consumable_readings(percent, status, consumable_types(name, sort))")
-        .eq("machine_id", sel.id).order("inspected_on", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle()
+  const { data: recent } = sel
+    ? await supabase.from("inspections").select(INSPECTION_FIELDS)
+        .eq("machine_id", sel.id).order("inspected_on", { ascending: false }).order("id", { ascending: false }).limit(2)
     : { data: null };
+  const [latest, prev] = (recent ?? []) as unknown as Latest[];
 
   const form = (
     <form action={saveClient} className="flex flex-col gap-3">
@@ -59,7 +59,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
                 <p className="text-lg font-bold">{sel.serial} <span className="text-sm font-normal text-gray-500">{sel.color_type === "color" ? "컬러" : "흑백"} · {sel.model}{sel.active ? "" : " · 사용 안 함"}</span></p>
                 <Link href={`/machines/${sel.id}`} className="shrink-0 text-sm text-gray-500">기계 정보 ›</Link>
               </div>
-              <Consumables machineId={sel.id} serial={sel.serial} latest={latest as Latest} />
+              <Consumables machine={{ id: sel.id, serial: sel.serial, model: sel.model, color: sel.color_type === "color" }} latest={latest} prev={prev} />
             </>
           ) : <p className="card text-sm text-gray-500">등록된 기계가 없습니다.</p>}
 

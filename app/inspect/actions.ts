@@ -38,8 +38,14 @@ export async function saveInspection(form: FormData) {
     if (!p || b.inspections.inspected_on > p.on) prevOf.set(b.consumable_type_id, { ...b, on: b.inspections.inspected_on });
   }
   const readings = entered.map((r) => ({ ...r, replaced: isReplaced(prevOf.get(r.consumable_type_id), r) }));
-  if ([mono, color].some((v) => v !== null && !(Number.isInteger(v) && v >= 0))) fail("카운터는 숫자로 입력하세요.");
-  if (!readings.length && mono === null && color === null && !photos.length) fail("입력한 내용이 없습니다.");
+  // 흑백·칼라 외 카운터 c_{칸이름} → {"칸이름": 숫자}
+  const extra: Record<string, number> = {};
+  for (const k of [...form.keys()].filter((k) => k.startsWith("c_")).slice(0, 6)) {
+    const v = num(form, k);
+    if (v !== null) extra[k.slice(2, 40)] = v;
+  }
+  if ([mono, color, ...Object.values(extra)].some((v) => v !== null && !(Number.isInteger(v) && v >= 0))) fail("카운터는 숫자로 입력하세요.");
+  if (!readings.length && mono === null && color === null && !Object.keys(extra).length && !photos.length) fail("입력한 내용이 없습니다.");
 
   // 카운터가 직전 기록보다 작으면 메모 필수
   const { data: prev } = await supabase.from("inspections").select("mono_counter, color_counter")
@@ -56,17 +62,18 @@ export async function saveInspection(form: FormData) {
     : { data: null };
   const usage = (v: number | null, old: number | null | undefined) => (v !== null && old != null ? v - old : null);
 
+  // 같은 달 정기점검을 다시 올리면 새로 만들지 않고 그 기록에 덧씀 (이번에 비운 칸은 지난 값 유지)
+  const { data: same } = period
+    ? await supabase.from("inspections").select("id, extra_counters").eq("machine_id", machineId).eq("kind", "regular").eq("period_month", period).maybeSingle()
+    : { data: null };
+  const extras = { ...same?.extra_counters, ...extra };
+
   const row = {
     machine_id: machineId, inspected_on: on, kind, period_month: period,
-    mono_counter: mono, color_counter: color,
+    mono_counter: mono, color_counter: color, extra_counters: Object.keys(extras).length ? extras : null,
     mono_usage: usage(mono, prevReg?.mono_counter), color_usage: usage(color, prevReg?.color_counter),
     memo,
   };
-
-  // 같은 달 정기점검을 다시 올리면 새로 만들지 않고 그 기록에 덧씀 (이번에 비운 칸은 지난 값 유지)
-  const { data: same } = period
-    ? await supabase.from("inspections").select("id").eq("machine_id", machineId).eq("kind", "regular").eq("period_month", period).maybeSingle()
-    : { data: null };
   const { data: saved, error } = same
     ? await supabase.from("inspections").update(Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null))).eq("id", same.id).select("id").single()
     : await supabase.from("inspections").insert(row).select("id").single();

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 import { addPartReplacement, deletePartReplacement, saveMachine } from "../actions";
-import { Consumables, type Latest } from "../consumables";
+import { Consumables, INSPECTION_FIELDS, type Latest } from "../consumables";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const won = (n: number | null | undefined) => (n ?? 0).toLocaleString("ko-KR");
@@ -20,10 +20,11 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
 
   const [{ data: m }, { data: clients }, { data: staff }] = await Promise.all([
     isNew ? Promise.resolve({ data: null }) : supabase.from("machines")
-      .select("*, clients(name), contracts(*), part_replacements(*, part_types(name), staff(name)), inspections(inspected_on, mono_usage, color_usage, consumable_readings(percent, status, consumable_types(name, sort)))")
+      .select(`*, clients(name), contracts(*), part_replacements(*, part_types(name), staff(name)), inspections(${INSPECTION_FIELDS})`)
       .eq("id", id)
       .order("inspected_on", { referencedTable: "inspections", ascending: false })
-      .limit(1, { referencedTable: "inspections" })
+      .order("id", { referencedTable: "inspections", ascending: false })
+      .limit(2, { referencedTable: "inspections" })
       .single(),
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("staff").select("id, name").eq("active", true).order("name"),
@@ -48,7 +49,10 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
     >
       {sp.saved && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-700">저장했습니다.</p>}
 
-      {!isNew && <Consumables machineId={m!.id} serial={m!.serial} latest={(m!.inspections as Latest[])[0]} />}
+      {!isNew && (
+        <Consumables machine={{ id: m!.id, serial: m!.serial, model: m!.model, color: m!.color_type === "color" }}
+          latest={(m!.inspections as Latest[])[0]} prev={(m!.inspections as Latest[])[1]} />
+      )}
 
       {/* 평소엔 소모품만 보이게, 기계 정보·계약은 접어둠 */}
       <details open={isNew}>
