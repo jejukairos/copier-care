@@ -81,6 +81,10 @@ profiles(이름, 휴대폰, role, active) / clients / machines(기계번호 UNIQ
 - [ ] ⑤ 웹 푸시 알림 + 아침 8시(KST) 요약 + 중복 방지
 - [ ] ⑥ GitHub + Netlify 배포 (가입은 이때 안내)
 
+## 속도 (2026-11-10)
+- Netlify 무료는 서버 함수 지역 변경 불가(Pro 이상) → 서버는 **미국 오하이오**, DB는 서울 → Supabase 호출 1번마다 태평양 왕복. 화면/저장당 DB 호출 수를 줄일 것.
+- 로그인 확인은 `getClaims()`(ES256 토큰을 서버 안에서 확인, 왕복 없음). 저장 버튼은 `lib/submit.tsx`의 `Submit`("저장 중…" 잠금, 중복 저장 방지).
+
 ## 개발 환경 메모 (Windows / PowerShell)
 - Node 설치 직후라 새 셸에서 PATH가 안 잡히면 명령 앞에:
   `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')`
