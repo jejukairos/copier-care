@@ -20,18 +20,19 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  let { data: { user } } = await supabase.auth.getUser();
+  // getClaims: 로그인 토큰을 서버 안에서 서명 확인 (매번 Supabase에 묻는 getUser보다 빠름, 만료 시 갱신도 함)
+  let signedIn = !!(await supabase.auth.getClaims()).data?.claims;
   // 로그인 화면 없이 쓰기: 세션이 없으면 Netlify 환경변수의 공용계정으로 자동 로그인 (실패하면 기존 로그인 화면)
   const email = process.env.SHARED_LOGIN_EMAIL, password = process.env.SHARED_LOGIN_PASSWORD;
-  if (!user && email && password) {
-    ({ data: { user } } = await supabase.auth.signInWithPassword({ email, password }));
-    if (user && request.nextUrl.pathname.startsWith("/login")) {
+  if (!signedIn && email && password) {
+    signedIn = !!(await supabase.auth.signInWithPassword({ email, password })).data.user;
+    if (signedIn && request.nextUrl.pathname.startsWith("/login")) {
       const go = NextResponse.redirect(new URL("/", request.url));
       response.cookies.getAll().forEach((c) => go.cookies.set(c));
       return go;
     }
   }
-  if (!user && !request.nextUrl.pathname.startsWith("/login")) {
+  if (!signedIn && !request.nextUrl.pathname.startsWith("/login")) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   return response;

@@ -23,8 +23,9 @@ export async function createClient() {
 // 로그인한 직원과 프로필. 비로그인이면 null.
 export async function getMe() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: profile } = await supabase.from("profiles").select("name, role, active").eq("id", user.id).single();
-  return { user, profile };
+  // getClaims: 토큰 서명을 서버 안에서 확인 (getUser처럼 Supabase에 왕복하지 않음 — 서버가 미국이라 왕복마다 느림)
+  const claims = (await supabase.auth.getClaims()).data?.claims;
+  if (!claims) return null;
+  const { data: profile } = await supabase.from("profiles").select("name, role, active").eq("id", claims.sub).single();
+  return { user: { id: claims.sub, email: claims.email }, profile };
 }

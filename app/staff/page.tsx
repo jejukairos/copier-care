@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Page, requireMe, str } from "@/lib/page";
+import { Submit } from "@/lib/submit";
 import { createClient } from "@/lib/supabase/server";
 
 async function saveStaff(form: FormData) {
@@ -24,7 +25,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
         <p className="font-semibold">직원 추가</p>
         <input name="name" required placeholder="이름" className="input" />
         <input name="phone" type="tel" placeholder="휴대폰 (알림용)" className="input" />
-        <button className="btn">추가</button>
+        <Submit label="추가" />
       </form>
       {staff?.map((s) => (
         <form key={s.id} action={saveStaff} className={`card flex flex-col gap-2 ${s.active ? "" : "opacity-50"}`}>
@@ -38,7 +39,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
               <option value="on">근무 중</option>
               <option value="off">퇴사 (목록에서 숨김)</option>
             </select>
-            <button className="btn-outline shrink-0">수정</button>
+            <Submit label="수정" className="btn-outline shrink-0" />
           </div>
         </form>
       ))}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Page, requireMe } from "@/lib/page";
+import { Submit } from "@/lib/submit";
 import { createClient } from "@/lib/supabase/server";
 import { addPartReplacement, deletePartReplacement, saveMachine } from "../actions";
 import { Consumables, INSPECTION_FIELDS, type Latest } from "../consumables";
@@ -119,7 +120,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
             <p>월 기본료 {won(contract.monthly_fee)}원</p>
           </div>
         )}
-        <button className="btn">저장</button>
+        <Submit label="저장" />
       </form>
       </details>
 
@@ -146,7 +147,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
                 </select>
               </label>
               <label className="label">메모<input name="memo" className="input" /></label>
-              <button className="btn">기록</button>
+              <Submit label="기록" />
             </form>
           </details>
           {history.map((h) => (
@@ -162,7 +163,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
                 <form action={deletePartReplacement}>
                   <input type="hidden" name="machine_id" value={id} />
                   <input type="hidden" name="id" value={h.id} />
-                  <button className="text-red-600">삭제</button>
+                  <Submit label="삭제" className="text-red-600" />
                 </form>
               )}
             </div>

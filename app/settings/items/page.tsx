@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Page, num, requireMe, str } from "@/lib/page";
+import { Submit } from "@/lib/submit";
 import { createClient } from "@/lib/supabase/server";
 
 // 소모품(consumable_types)·부품(part_types) 항목 추가/수정. 삭제 대신 '사용 안 함'(과거 기록 보존).
@@ -72,7 +73,7 @@ export default async function ItemsPage({ searchParams }: PageProps<"/settings/i
               </select>
             )}
             {r?.tray_no && <span className="text-gray-500">트레이 수 {r.tray_no}개 이상 기계만 표시</span>}
-            <button className="btn-outline ml-auto py-2">{r ? "저장" : "추가"}</button>
+            <Submit label={r ? "저장" : "추가"} className="btn-outline ml-auto py-2" />
           </div>
         </form>
         </details>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Page, requireMe } from "@/lib/page";
+import { Submit } from "@/lib/submit";
 import { createClient } from "@/lib/supabase/server";
 import { Consumables, INSPECTION_FIELDS, type Latest } from "../../machines/consumables";
 import { saveClient } from "../actions";
@@ -35,7 +36,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
       <label className="label">담당자<input name="contact_name" defaultValue={c?.contact_name ?? ""} className="input" /></label>
       <label className="label">연락처<input name="phone" type="tel" defaultValue={c?.phone ?? ""} className="input" /></label>
       <label className="label">주소<input name="address" defaultValue={c?.address ?? ""} className="input" /></label>
-      <button className="btn">저장</button>
+      <Submit label="저장" />
     </form>
   );
 
