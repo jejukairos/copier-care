@@ -2,6 +2,7 @@ import Link from "next/link";
 import { matches, Page, requireMe } from "@/lib/page";
 import { createClient } from "@/lib/supabase/server";
 import { InspectForm, type Last } from "./form";
+import { NEW_PHOTO } from "./photos";
 import { MachineSearch } from "./search";
 
 type M = { id: number; serial: string; model: string; color_type: string; clients: { name: string } | null };
@@ -40,11 +41,14 @@ export default async function InspectPage({ searchParams }: PageProps<"/inspect"
   }
 
   const m = hits[0];
-  const [{ data: types }, { data: last }] = await Promise.all([
+  // 새 기계 등록 화면에서 올린 사진 (?photos=new/…,new/…) → 미리보기 주소 만들어 넘김
+  const newPhotos = String(sp.photos ?? "").split(",").filter((p) => NEW_PHOTO.test(p)).slice(0, 4);
+  const [{ data: types }, { data: last }, { data: signed }] = await Promise.all([
     supabase.from("consumable_types").select("id, name, is_main").eq("applies_to", m.color_type).eq("active", true).order("sort"),
     supabase.from("inspections")
       .select("inspected_on, mono_counter, color_counter, extra_counters, consumable_readings(consumable_type_id, percent, status)")
       .eq("machine_id", m.id).order("inspected_on", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
+    newPhotos.length ? supabase.storage.from("inspection-photos").createSignedUrls(newPhotos, 3600) : Promise.resolve({ data: [] }),
   ]);
 
   return (
@@ -55,6 +59,7 @@ export default async function InspectPage({ searchParams }: PageProps<"/inspect"
         types={types ?? []} last={last as Last}
         today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
         ai={!!process.env.GEMINI_API_KEY}
+        initial={(signed ?? []).flatMap((s) => (s.signedUrl && s.path ? [{ url: s.signedUrl, path: s.path }] : []))}
       />
     </Page>
   );

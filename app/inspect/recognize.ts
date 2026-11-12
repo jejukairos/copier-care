@@ -2,12 +2,13 @@
 
 import { createClient, getMe } from "@/lib/supabase/server";
 import { COUNTER_RULES, counterGuide, extraCounters } from "./counters";
+import { NEW_PHOTO } from "./photos";
 
 export type Recognized = {
   serial: string | null; mono_counter: number | null; color_counter: number | null; extra: Record<string, number | null>;
   items: { id: number; percent: number | null; status: string | null }[];
 };
-type Raw = { serial?: unknown; mono_counter?: unknown; color_counter?: unknown; extra?: unknown; items?: { id?: unknown; percent?: unknown; status?: unknown }[] };
+type Raw = { serial?: unknown; model?: unknown; color?: unknown; mono_counter?: unknown; color_counter?: unknown; extra?: unknown; items?: { id?: unknown; percent?: unknown; status?: unknown }[] };
 
 // 무료 한도가 모델별로 따로라, 앞 모델이 한도 초과·오류면 다음 모델로
 const MODELS = [process.env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite"];
@@ -18,21 +19,44 @@ const int = (v: unknown, max = Number.MAX_SAFE_INTEGER) => {
 };
 const text = (v: unknown, len: number) => (typeof v === "string" ? v.trim().slice(0, len) || null : null);
 
+type Supa = Awaited<ReturnType<typeof createClient>>;
+const download = async (supabase: Supa, paths: string[]) => {
+  const files = await Promise.all(paths.map((p) => supabase.storage.from("inspection-photos").download(p)));
+  return Promise.all(files.flatMap((f) => (f.data ? [f.data.arrayBuffer()] : [])));
+};
+
+// 새 기계 등록: 사진에서 기계번호·컬러/흑백·기종만 읽음 (카운터·소모품은 다음 화면에서 이 사진으로 다시 읽음)
+export async function recognizeMachine(paths: string[]): Promise<{ serial: string | null; model: string | null; color: boolean | null } | { error: string }> {
+  if (!process.env.GEMINI_API_KEY) return { error: "자동 읽기가 꺼져 있습니다." };
+  if (!(await getMe())) return { error: "로그인이 필요합니다." };
+  paths = paths.filter((p) => NEW_PHOTO.test(p)).slice(0, 4);
+  if (!paths.length) return { error: "사진을 찾을 수 없습니다." };
+  const images = await download(await createClient(), paths);
+  const prompt = [
+    `복사기 화면 사진입니다. 사진에 보이는 값만 읽어 JSON 하나로만 답하세요. 안 보이거나 확실하지 않으면 null.`,
+    `형식: {"serial": 문자열|null, "model": 문자열|null, "color": true|false|null}`,
+    `- serial: 화면에 보이는 기계번호(보통 6자리 숫자).`,
+    `- model: 화면에 기종명이 글자로 적혀 있을 때만 그대로(예: DCSC2020, APC3060). 추측 금지.`,
+    `- color: 칼라 카운터나 토너 C/M/Y가 보이면 true, 흑백 토너·흑백 카운터만 있으면 false.`,
+  ].join("\n");
+  const r = await ask(images, prompt);
+  if ("error" in r) return r;
+  return { serial: text(r.serial, 30)?.toUpperCase() ?? null, model: text(r.model, 30), color: typeof r.color === "boolean" ? r.color : null };
+}
+
 // 사진을 Gemini(무료)로 읽어 입력칸 채울 값을 돌려줌. 실패하면 { error } → 직접 입력
 export async function recognizePhotos(machineId: number, paths: string[]): Promise<Recognized | { error: string }> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { error: "자동 읽기가 꺼져 있습니다." };
+  if (!process.env.GEMINI_API_KEY) return { error: "자동 읽기가 꺼져 있습니다." };
   if (!(await getMe())) return { error: "로그인이 필요합니다." };
-  paths = paths.filter((p) => p.startsWith(`${machineId}/`)).slice(0, 4);
+  paths = paths.filter((p) => p.startsWith(`${machineId}/`) || NEW_PHOTO.test(p)).slice(0, 4);
 
   const supabase = await createClient();
   const { data: m } = await supabase.from("machines").select("color_type, model").eq("id", machineId).single();
   if (!m || !paths.length) return { error: "기계나 사진을 찾을 수 없습니다." };
-  const [{ data: types }, files] = await Promise.all([
+  const [{ data: types }, images] = await Promise.all([
     supabase.from("consumable_types").select("id, name").eq("applies_to", m.color_type).eq("active", true).order("sort"),
-    Promise.all(paths.map((p) => supabase.storage.from("inspection-photos").download(p))),
+    download(supabase, paths),
   ]);
-  const images = await Promise.all(files.flatMap((f) => (f.data ? [f.data.arrayBuffer()] : [])));
   const ids = new Set((types ?? []).map((t) => t.id));
 
   const guide = counterGuide(m.model);
@@ -49,6 +73,21 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
     ...(types ?? []).map((t) => `  ${t.id}: ${t.name}`),
   ].join("\n");
 
+  const r = await ask(images, prompt);
+  if ("error" in r) return r;
+  return {
+    serial: text(r.serial, 30)?.toUpperCase() ?? null,
+    mono_counter: int(r.mono_counter),
+    color_counter: int(r.color_counter),
+    extra: Object.fromEntries(extra.map((x) => [x, int((r.extra as Record<string, unknown> | undefined)?.[x])])),
+    items: (Array.isArray(r.items) ? r.items : [])
+      .filter((i) => ids.has(i?.id as number))
+      .map((i) => ({ id: i.id as number, percent: int(i.percent, 100), status: text(i.status, 20) })),
+  };
+}
+
+async function ask(images: ArrayBuffer[], prompt: string): Promise<Raw | { error: string }> {
+  const key = process.env.GEMINI_API_KEY!;
   let lastError = "";
   for (const model of MODELS) {
     try {
@@ -72,16 +111,9 @@ export async function recognizePhotos(machineId: number, paths: string[]): Promi
       const json = await res.json();
       const out = (json.candidates?.[0]?.content?.parts ?? [])
         .filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? "").join("");
-      const r = JSON.parse(out) as Raw;
-      return {
-        serial: text(r.serial, 30)?.toUpperCase() ?? null,
-        mono_counter: int(r.mono_counter),
-        color_counter: int(r.color_counter),
-        extra: Object.fromEntries(extra.map((x) => [x, int((r.extra as Record<string, unknown> | undefined)?.[x])])),
-        items: (Array.isArray(r.items) ? r.items : [])
-          .filter((i) => ids.has(i?.id as number))
-          .map((i) => ({ id: i.id as number, percent: int(i.percent, 100), status: text(i.status, 20) })),
-      };
+      const r = JSON.parse(out);
+      if (r && typeof r === "object" && !("error" in r)) return r as Raw;
+      lastError = "응답을 읽지 못함";
     } catch (e) {
       lastError = e instanceof Error && e.name === "TimeoutError" ? "응답 지연" : "응답을 읽지 못함";
       console.error("gemini", model, e);

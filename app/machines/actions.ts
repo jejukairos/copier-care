@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { num, str } from "@/lib/page";
+import { NEW_PHOTO } from "../inspect/photos";
 
 const fail = (path: string, msg: string): never => redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(msg)}`);
 
@@ -43,7 +44,11 @@ export async function saveMachine(form: FormData) {
     const { error: cErr } = await supabase.from("contracts").upsert(contract, { onConflict: "machine_id,starts_on" });
     if (cErr) fail(`/machines/${data!.id}`, "기계는 저장됐지만 계약 저장 실패: " + cErr.message);
   }
-  redirect(`/machines/${data!.id}?saved=1`);
+  // 새 기계를 사진으로 등록했으면 그 사진 그대로 소모품·카운터 입력 화면으로 (거기서 자동으로 읽음)
+  const photos = form.getAll("photo").map(String).filter((p) => NEW_PHOTO.test(p)).slice(0, 4);
+  redirect(!id && photos.length
+    ? `/inspect?q=${encodeURIComponent(row.serial!)}&photos=${encodeURIComponent(photos.join(","))}`
+    : `/machines/${data!.id}?saved=1`);
 }
 
 export async function addPartReplacement(form: FormData) {

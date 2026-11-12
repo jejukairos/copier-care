@@ -5,6 +5,7 @@ import { Submit } from "@/lib/submit";
 import { createClient } from "@/lib/supabase/server";
 import { addPartReplacement, deletePartReplacement, saveMachine } from "../actions";
 import { Consumables, INSPECTION_FIELDS, type Latest } from "../consumables";
+import { PhotoFill } from "../photo-fill";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const won = (n: number | null | undefined) => (n ?? 0).toLocaleString("ko-KR");
@@ -60,6 +61,7 @@ export default async function MachinePage({ params, searchParams }: PageProps<"/
         <summary className="text-sm text-gray-500">기계 정보 · 계약 조건 수정</summary>
       <form action={saveMachine} className="mt-3 flex flex-col gap-3">
         {!isNew && <input type="hidden" name="id" value={id} />}
+        {isNew && <PhotoFill ai={!!process.env.GEMINI_API_KEY} />}
         <label className="label">기계번호 *<input name="serial" required defaultValue={m?.serial} className="input uppercase" /></label>
         <label className="label">거래처 *
           <select name="client_id" required defaultValue={clientId || ""} className="input">

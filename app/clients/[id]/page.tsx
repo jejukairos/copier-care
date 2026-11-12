@@ -65,7 +65,7 @@ export default async function ClientPage({ params, searchParams }: PageProps<"/c
           ) : <p className="card text-sm text-gray-500">등록된 기계가 없습니다.</p>}
 
           <div className="mt-4 flex flex-col gap-3 border-t border-gray-200 pt-4">
-            <Link href={`/machines/new?client=${id}`} className="btn-outline text-center text-sm font-semibold">+ 기계 추가</Link>
+            <Link href={`/machines/new?client=${id}`} className="btn-outline text-center text-sm font-semibold">+ 기계 추가 (📷 사진으로)</Link>
             <details>
               <summary className="text-sm text-gray-500">거래처 정보 수정 (담당자 · 연락처 · 주소)</summary>
               <div className="mt-3">{form}</div>

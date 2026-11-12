@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { counterGuide, extraCounters } from "./counters";
 import { useFormStatus } from "react-dom";
-import { createClient } from "@/lib/supabase/client";
 import { saveInspection } from "./actions";
+import { uploadPhoto, type Photo } from "./photos";
 import { recognizePhotos, type Recognized } from "./recognize";
 
 type Type = { id: number; name: string; is_main: boolean };
@@ -14,26 +14,16 @@ export type Last = {
   consumable_readings: Reading[];
 } | null;
 
-// 휴대폰 사진(수 MB)을 긴 변 1600px JPEG로 줄임 → 약 200~300KB, 카운터 숫자는 읽힐 정도
-async function shrink(file: File) {
-  const img = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
-  const canvas = Object.assign(document.createElement("canvas"), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
-  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return new Promise<Blob>((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("사진 변환 실패"))), "image/jpeg", 0.75));
-}
-
-const photoPath = (machineId: number) => `${machineId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-
 function SaveButton({ uploading }: { uploading: boolean }) {
   const { pending } = useFormStatus();
   return <button disabled={uploading || pending} className="btn">{pending ? "저장 중…" : uploading ? "사진 올리는 중…" : "저장"}</button>;
 }
 
-export function InspectForm({ machine, types, last, today, ai }: {
+export function InspectForm({ machine, types, last, today, ai, initial = [] }: {
   machine: { id: number; serial: string; model: string; color: boolean }; types: Type[]; last: Last; today: string; ai: boolean;
+  initial?: Photo[]; // 새 기계 등록 화면에서 이미 올린 사진 → 열자마자 자동으로 읽음
 }) {
-  const [photos, setPhotos] = useState<{ url: string; path: string }[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>(initial);
   const [uploading, setUploading] = useState(0);
   const [photoError, setPhotoError] = useState("");
   const [aiNote, setAiNote] = useState("");
@@ -52,21 +42,15 @@ export function InspectForm({ machine, types, last, today, ai }: {
     return [c.name, el instanceof HTMLInputElement ? el.value : ""];
   })));
 
-  // 사진은 서버를 거치지 않고 Supabase Storage로 바로 올림 (Netlify 사용량 절약)
-  // shortcut: 올린 뒤 저장 안 하고 나가면 사진이 저장소에 남음, 용량이 문제 되면 정리 기능에서 같이 지울 것
   async function addPhotos(files: File[]) {
     setPhotoError("");
-    const supabase = createClient();
     const added: string[] = [];
     for (const file of files) {
       setUploading((n) => n + 1);
       try {
-        const blob = await shrink(file);
-        const path = photoPath(machine.id);
-        const { error } = await supabase.storage.from("inspection-photos").upload(path, blob, { contentType: "image/jpeg" });
-        if (error) throw error;
-        setPhotos((p) => [...p, { url: URL.createObjectURL(blob), path }]);
-        added.push(path);
+        const p = await uploadPhoto(file, machine.id);
+        setPhotos((ps) => [...ps, p]);
+        added.push(p.path);
       } catch (e) {
         setPhotoError("사진 올리기 실패: " + (e instanceof Error ? e.message : String(e)));
       } finally {
@@ -98,6 +82,14 @@ export function InspectForm({ machine, types, last, today, ai }: {
     const other = r.serial && r.serial !== machine.serial.toUpperCase() ? ` ⚠️ 사진 속 기계번호 ${r.serial}가 ${machine.serial}와 다릅니다!` : "";
     setAiNote((filled ? `✓ ${filled}칸 자동 입력 (노란 칸). 사진과 맞는지 확인 후 저장하세요.` : "읽은 값이 없습니다. 직접 입력해 주세요.") + other);
   }
+
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || !ai || !initial.length) return;
+    started.current = true;
+    readPhotos(initial.map((p) => p.path));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 화면 열 때 한 번만
+  }, []);
 
   // 서버에서 막히면 입력한 값이 다 날아가므로 카운터 감소는 여기서 먼저 확인
   function check(e: React.FormEvent<HTMLFormElement>) {
